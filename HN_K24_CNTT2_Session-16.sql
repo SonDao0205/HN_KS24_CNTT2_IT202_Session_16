@@ -293,12 +293,6 @@ DELIMITER ;
 -- Tạo một thủ tục có tên proc_insert_order_details nhận vào tham số là mã đơn hàng,
 -- mã sản phẩm, số lượng và giá sản phẩm. Sử dụng transaction thực hiện các yêu cầu
 -- sau :
--- Kiểm tra nếu mã hóa đơn không tồn tại trong bảng order thì ném ra thông báo
--- lỗi “không tồn tại mã hóa đơn”.
--- Chèn dữ liệu vào bảng order_details
--- Cập nhật tổng tiền của đơn hàng ở bảng Orders
--- Nếu như có bất cứ lỗi nào sinh ra, rollback lại Transaction
--- Câu 11 - Quản lý transaction
 DELIMITER $$
 CREATE PROCEDURE proc_insert_order_details(
     IN p_order_id INT, 
@@ -309,22 +303,24 @@ CREATE PROCEDURE proc_insert_order_details(
 BEGIN
     DECLARE EXIT HANDLER FOR SQLEXCEPTION
     BEGIN
+		-- Nếu như có bất cứ lỗi nào sinh ra, rollback lại Transaction
         ROLLBACK;
         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Lỗi trong quá trình xử lý transaction, đã rollback';
     END;
     START TRANSACTION;
+		-- Kiểm tra nếu mã hóa đơn không tồn tại trong bảng order thì ném ra thông báo
         IF NOT EXISTS (SELECT 1 FROM Orders WHERE order_id = p_order_id) THEN
+			-- lỗi “không tồn tại mã hóa đơn”.
             SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Không tồn tại mã hóa đơn';
         END IF;
-
+		-- Chèn dữ liệu vào bảng order_details
         INSERT INTO OrderDetails(order_id, product_id, quantity, unit_price)
         VALUES (p_order_id, p_product_id, p_quantity, p_unit_price);
-        
+		-- Cập nhật tổng tiền của đơn hàng ở bảng Orders
         UPDATE Orders
         SET total_amount = total_amount + (p_quantity * p_unit_price)
         WHERE order_id = p_order_id;
 
     COMMIT;
-    
 END $$
 DELIMITER ;
